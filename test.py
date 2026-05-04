@@ -207,7 +207,7 @@ def find_landmark_all(extractor, device, model_post, image_path1: str, dataloade
         final_dict["images"].append(local_dict)
 
 
-    with open("xxx/results/ours_head_topk3.json", "w") as f:
+    with open("/home/taotl/Desktop/FM-OSD/results/ours_head_topk3.json", "w") as f:
         json.dump(final_dict, f)
     print('success saving')
     return pred_all, gt_all, imgs_all, img_names_all  # lists
@@ -227,7 +227,7 @@ def str2bool(v):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Facilitate ViT Descriptor point correspondences.')
-    parser.add_argument('--save_dir', type=str, default = 'xxx/output', required=False, help='The root save dir for results.')
+    parser.add_argument('--save_dir', type=str, default = '/home/taotl/Desktop/FM-OSD/output', required=False, help='The root save dir for results.')
     parser.add_argument('--load_size', default=224, type=int, help='load size of the input image.')
     parser.add_argument('--stride', default=4, type=int, help="""stride of first convolution layer. 
                                                                  small stride -> higher resolution.""")
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     parser.add_argument('--topk', default=3, type=int, help='Final number of correspondences.')
 
     # 
-    parser.add_argument('--dataset_pth', type=str, default = 'xxx/dataset/Cephalometric/', required=False, help='data root')
+    parser.add_argument('--dataset_pth', type=str, default = '/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/', required=False, help='data root')
     parser.add_argument('--input_size', default=[2400, 1935])
     parser.add_argument('--id_shot', default=125, type=int, help='template id')
     parser.add_argument('--eval_radius', default=[2, 2.5, 3, 4, 6, 8], help='radius')
@@ -290,13 +290,13 @@ if __name__ == "__main__":
     
     iter_num = 0
     # load models
-    model_path = 'xxx/models/model_post_fine_iter_20.pth'
+    model_path = '/home/taotl/Desktop/FM-OSD/models/model_post_fine_iter_20.pth'
     model_post.load_state_dict(torch.load(model_path))
 
     # load global model
     model_dict = model_post.state_dict()
 
-    global_model_path = 'xxx/models/model_post_iter_9450.pth'
+    global_model_path = '/home/taotl/Desktop/FM-OSD/models/model_post_iter_9450.pth'
     pretrained_dict = torch.load(global_model_path)
     
     model_keys = model_dict.keys()

@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+.eggs/
+
+# Build artifacts
+build/
+*.so
+*.o
+
+# Data (large, not tracked)
+data/
+dataset/
+logs/
+logs_*.txt
+
+# Model checkpoints (large binaries — track only specific small ones if needed)
+models/**/*.pth
+models/**/*.pt
+# Allow directory structure markers
+!models/**/.gitkeep
+
+# TCGR cache (large JSON prediction files)
+data/tcgr_cache/
+data/tcgr_cache_mlmf/
+
+# Output CSVs and TensorBoard events
+output/
+results/
+*.tfevents.*
+
+# Jupyter / IDE
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Misc
+*.log
+nohup.out

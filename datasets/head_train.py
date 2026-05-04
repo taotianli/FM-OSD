@@ -10,8 +10,8 @@ from torchvision.transforms import transforms
 
 def Getdatasetfromfile(train):  
     if train == 0:  
-        PathOfData = 'xxx/data/head/image'
-        PathOfTarget = 'xxx/data/head/label'
+        PathOfData = '/home/taotl/Desktop/FM-OSD/data/head/image'
+        PathOfTarget = '/home/taotl/Desktop/FM-OSD/data/head/label'
     else:
         PathOfData = None
         PathOfTarget = None

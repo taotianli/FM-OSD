@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('--topk', default=5, type=int, help='Final number of correspondences.')
 
     # 
-    parser.add_argument('--dataset_pth', type=str, default = 'xxx/dataset/Cephalometric/', required=False, help='data path')
+    parser.add_argument('--dataset_pth', type=str, default = '/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/', required=False, help='data path')
     parser.add_argument('--input_size', default=[2400, 1935])
     parser.add_argument('--id_shot', default=125, type=int, help='template id')
     parser.add_argument('--eval_radius', default=[2, 2.5, 3, 4, 6, 8], help='radius')
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         mode='Oneshot', size=args.input_size, load_size = args.load_size, id_oneshot=args.id_shot)
     
     # data saving path
-    snapshot_path = 'xxx/data/head/'
+    snapshot_path = '/home/taotl/Desktop/FM-OSD/data/head/'
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
     image_root = snapshot_path + 'image/'

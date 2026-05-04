@@ -1,4 +1,5 @@
 import argparse
+import os
 import torch
 import torchvision.transforms
 from torch import nn
@@ -73,8 +74,15 @@ class ViTExtractor:
                            vit_base_patch16_224]
         :return: the model
         """
+        # Use local cache first, fall back to remote download
+        hub_dir = '/home/taotl/.cache/torch/hub'
+        dino_local = f'{hub_dir}/facebookresearch_dino_main'
+        
         if 'dino' in model_type:
-            model = torch.hub.load('facebookresearch/dino:main', model_type)  
+            if os.path.exists(dino_local):
+                model = torch.hub.load(dino_local, model_type, source='local')
+            else:
+                model = torch.hub.load('facebookresearch/dino:main', model_type)
         else:  # model from timm -- load weights from timm to dino model (enables working on arbitrary size images).
             temp_model = timm.create_model(model_type, pretrained=True)
             model_type_dict = {
@@ -83,7 +91,11 @@ class ViTExtractor:
                 'vit_base_patch16_224': 'dino_vitb16',
                 'vit_base_patch8_224': 'dino_vitb8'
             }
-            model = torch.hub.load('facebookresearch/dino:main', model_type_dict[model_type])
+            dino_base = model_type_dict[model_type]
+            if os.path.exists(dino_local):
+                model = torch.hub.load(dino_local, dino_base, source='local')
+            else:
+                model = torch.hub.load('facebookresearch/dino:main', dino_base)
             temp_state_dict = temp_model.state_dict()
             del temp_state_dict['head.weight']
             del temp_state_dict['head.bias']
@@ -460,6 +472,57 @@ class ViTExtractor:
         temp_mins, temp_maxs = cls_attn_map.min(dim=1)[0], cls_attn_map.max(dim=1)[0]
         cls_attn_maps = (cls_attn_map - temp_mins) / (temp_maxs - temp_mins)  # normalize to range [0,1]
         return cls_attn_maps
+
+    def extract_multi_layer_multi_facet_descriptors(
+        self, 
+        batch: torch.Tensor, 
+        layers: List[int] = [5, 8, 11], 
+        facets: List[str] = ['key', 'value'],
+        bin: bool = True, 
+        include_cls: bool = False
+    ) -> List[torch.Tensor]:
+        """
+        MLMF: Extract descriptors from multiple layers and multiple facets.
+        This enables adaptive feature fusion for anatomy-specific landmark detection.
+        
+        :param batch: batch to extract descriptors for. Has shape BxCxHxW.
+        :param layers: list of layers to extract (e.g., [5, 8, 11] for shallow/mid/deep).
+        :param facets: list of facets to extract (e.g., ['key', 'value']).
+        :param bin: apply log binning to the descriptor.
+        :return: list of descriptors, one for each (layer, facet) combination.
+                 Each has shape Bx1xtxd' where d' is the descriptor dimension.
+        """
+        all_descriptors = []
+        
+        for layer in layers:
+            for facet in facets:
+                assert facet in ['key', 'query', 'value', 'token'], \
+                    f"{facet} is not a supported facet."
+                
+                self._extract_features(batch, [layer], facet)
+                x = self._feats[0]
+                
+                if facet == 'token':
+                    x.unsqueeze_(dim=1)
+                if not include_cls:
+                    x = x[:, :, 1:, :]
+                
+                if not bin:
+                    desc = x.permute(0, 2, 3, 1).flatten(start_dim=-2, end_dim=-1).unsqueeze(dim=1)
+                else:
+                    desc = self._log_bin(x)
+                
+                all_descriptors.append(desc)
+        
+        return all_descriptors
+    
+    def get_mlmf_config(self) -> dict:
+        """Return the default MLMF configuration."""
+        return {
+            'layers': [5, 8, 11],
+            'facets': ['key', 'value'],
+            'num_sources': 6,  # 3 layers x 2 facets
+        }
 
 """ taken from https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse"""
 def str2bool(v):

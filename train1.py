@@ -181,7 +181,7 @@ def heatmap_mse_loss(features, landmarks, var = 5.0, criterion = torch.nn.MSELos
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Facilitate ViT Descriptor point correspondences.')
-    parser.add_argument('--save_dir', type=str, default = 'xxx/output', required=False)
+    parser.add_argument('--save_dir', type=str, default = '/home/taotl/Desktop/FM-OSD/output', required=False)
     parser.add_argument('--load_size', default=224, type=int, help='load size of the input image.')
     parser.add_argument('--stride', default=4, type=int, help="""stride of first convolution layer. 
                                                                  small stride -> higher resolution.""")
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     parser.add_argument('--thresh', default=0.05, type=float, help='saliency maps threshold to distinguish fg / bg.')
     parser.add_argument('--topk', default=5, type=int, help='Final number of correspondences.')
 
-    parser.add_argument('--dataset_pth', type=str, default = 'xxx/dataset/Cephalometric/', required=False, help='data path')
+    parser.add_argument('--dataset_pth', type=str, default = '/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/', required=False, help='data path')
     parser.add_argument('--input_size', default=[2400, 1935])
     parser.add_argument('--id_shot', default=125, type=int, help='template id')
     parser.add_argument('--eval_radius', default=[2, 2.5, 3, 4, 6, 8], help='radius')
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model_post.parameters(), lr=args.lr)
 
     # model saving path
-    snapshot_path = 'xxx/models/' + args.exp
+    snapshot_path = '/home/taotl/Desktop/FM-OSD/models/' + args.exp
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
     writer = SummaryWriter(snapshot_path + '/log')
