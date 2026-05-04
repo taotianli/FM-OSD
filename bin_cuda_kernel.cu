@@ -9,14 +9,14 @@ namespace {
 
 template <typename scalar_t>
 __global__ void bin_cuda_forward_kernel(
-    const torch::PackedTensorAccessor<scalar_t,5,torch::RestrictPtrTraits,size_t> avg_pools,
+    const torch::PackedTensorAccessor32<scalar_t,5,torch::RestrictPtrTraits> avg_pools,
     const int B, 
     const int sub_desc_dim, 
     const int num_bins,
     const int num_patches0,
     const int num_patches1,
     const int hierarchy,
-    torch::PackedTensorAccessor<scalar_t,4,torch::RestrictPtrTraits,size_t> bin_x) {
+    torch::PackedTensorAccessor32<scalar_t,4,torch::RestrictPtrTraits> bin_x) {
 
     //
     //batch index
@@ -109,16 +109,16 @@ std::vector<torch::Tensor> bin_cuda_forward(
     const dim3 threads(sub_desc_dim, 1);
     const dim3 blocks(num_patches0, num_patches1);
 
-    AT_DISPATCH_FLOATING_TYPES(avg_pools.type(), "bin_forward_cuda", ([&] {
+    AT_DISPATCH_FLOATING_TYPES(avg_pools.scalar_type(), "bin_forward_cuda", ([&] {
     bin_cuda_forward_kernel<scalar_t><<<blocks, threads>>>(
-        avg_pools.packed_accessor<scalar_t,5,torch::RestrictPtrTraits,size_t>(),
+        avg_pools.packed_accessor32<scalar_t,5,torch::RestrictPtrTraits>(),
         B,
         sub_desc_dim,
         num_bins,
         num_patches0,
         num_patches1,
         hierarchy,
-        bin_x.packed_accessor<scalar_t,4,torch::RestrictPtrTraits,size_t>());
+        bin_x.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
     }));
 
     return {bin_x};

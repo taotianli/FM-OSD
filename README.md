@@ -174,9 +174,57 @@ python train_tcgr_cv.py \
 
 ### TCGR — Topology-Constrained Graph Refinement (`landmark_graph.py`)
 
-- **`TCGRModule`**: A 3-layer Graph Attention Network (GAT). Each landmark is a node; edges are fully connected (anatomical topology is implicitly learned). Input: normalized `[y, x]` coordinates + dummy confidence scores and feature embeddings. Output: refined coordinates.
+- **`TCGRModule`**: A 3-layer Graph Attention Network (GAT). **Cephalometric (19 points):** sparse adjacency from `get_cephalometric_adjacency`. **Hand (37 points) or other counts:** use `adjacency='dense'` (fully connected mask). Input: normalized `[y, x]` coordinates + dummy scores/features. Output: refined coordinates.
 - **`TCGRLoss`**: Combines coordinate L1 loss with a topology-consistency regularizer (pairwise distance ordering loss).
-- **Training**: 5-fold cross-validation on all 400 labeled images using cached MLMF+FM-OSD predictions as input. TCGR is lightweight (<<1M params) and trains in ~5 minutes per fold.
+- **Training**: 5-fold cross-validation on cached predictions (`train_tcgr_cv.py`). Cephalometric: 400 images. Hand: all cached train+test JSONs. TCGR is lightweight and trains quickly.
+
+---
+
+## Hand X-ray dataset (37 landmarks, same pipeline)
+
+Download Hand radiographs from the same [Oneshot landmark detection](https://github.com/MIRACLE-Center/Oneshot_landmark_detection) release (Google Drive link in that repo), unzip so that `dataset/Hand/hand/` contains `jpg/` and `all.csv`.
+
+**1. Offline template augmentation** (writes `data/hand/image/`, `data/hand/label/`):
+
+```bash
+python data_generate_hand.py --dataset_pth dataset/Hand/hand/ --id_shot 0 --max_iter 500
+```
+
+**2. Train MLMF global branch on Hand:**
+
+```bash
+python train1_mlmf_hand.py --dataset_pth dataset/Hand/hand/ --id_shot 0 --exp global_mlmf_hand
+```
+
+(`--auto_input_size True` reads H×W from the first augmented crop; optional `--input_size H W` to set manually.)
+
+**3. Fine-tune MLMF local branch:**
+
+```bash
+python train2_mlmf_hand.py \
+  --dataset_pth dataset/Hand/hand/ --id_shot 0 \
+  --global_ckpt models/global_mlmf_hand/model_post_mlmf_iter_xxxx.pth \
+  --exp local_mlmf_hand --max_iterations 100
+```
+
+**4. Cache MLMF predictions** for TCGR (`data/tcgr_cache_hand/{train,test}/<id>.json`):
+
+```bash
+python precompute_hand_cache.py \
+  --ckpt models/local_mlmf_hand/model_post_final.pth \
+  --oneshot_idx 0 --cache_dir data/tcgr_cache_hand
+```
+
+**5. TCGR 5-fold CV on Hand** (37 nodes, dense graph):
+
+```bash
+python train_tcgr_cv.py \
+  --dataset hand --cache_dir data/tcgr_cache_hand \
+  --exp tcgr_cv_hand --max_iterations 3000 \
+  --input_size 2600 2600
+```
+
+Use the same `--input_size` / normalization box as in TCGR training for Head if you tune it; for Hand the script defaults to `[2600, 2600]` when you switch `--dataset hand` and leave the Cephalometric default.
 
 ---
 
@@ -191,16 +239,22 @@ FM-OSD/
 ├── train1_mlmf.py            # MLMF global branch training
 ├── train2_mlmf.py            # MLMF local branch fine-tuning
 ├── train_tcgr_cv.py          # TCGR 5-fold CV training
-├── precompute_mlmf_cache.py  # Cache MLMF predictions for all 400 images
+├── data_generate_hand.py     # Hand template augmentation → data/hand/
+├── train1_mlmf_hand.py       # MLMF global on Hand
+├── train2_mlmf_hand.py       # MLMF local on Hand
+├── precompute_mlmf_cache.py  # Cache MLMF predictions (Cephalometric 400)
 ├── test.py                   # Original FM-OSD test
-├── datasets/                 # Dataset loaders
+├── datasets/
+│   └── hand_train.py         # Hand augmented-template training pairs
 ├── evaluation/               # MRE / SDR evaluation
 └── models/
     ├── global/               # Original FM-OSD global checkpoint
     ├── local/                # Original FM-OSD local checkpoint
     ├── global_mlmf/          # MLMF global checkpoint
     ├── local_mlmf/           # MLMF local checkpoint (best: iter 20, MRE 1.8327)
-    └── tcgr_cv_mlmf/         # TCGR fold checkpoints (fold1–5)
+    ├── global_mlmf_hand/     # Hand MLMF global
+    ├── local_mlmf_hand/      # Hand MLMF coarse-to-fine
+    └── tcgr_cv_mlmf/         # TCGR fold checkpoints (Cephalometric)
 ```
 
 ---

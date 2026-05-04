@@ -19,27 +19,31 @@ class AdaptiveFusionModule(nn.Module):
     Each source is first projected from high-dim (e.g. 6528) to out_channels (e.g. 256)
     at patch resolution. Attention weights are computed from these compact representations,
     avoiding the need to upsample 6528-channel tensors.
+
+    If uniform=True, uses equal weights (no attention) — used for ablation A5.
     """
     def __init__(self, num_sources: int, in_channels: int, out_channels: int,
-                 reduction: int = 4):
+                 reduction: int = 4, uniform: bool = False):
         super().__init__()
         self.num_sources = num_sources
+        self.uniform = uniform
 
-        # Per-source 1×1 projection: 6528 → out_channels (at patch resolution)
+        # Per-source 1×1 projection: in_channels → out_channels (at patch resolution)
         self.proj = nn.ModuleList([
             nn.Conv2d(in_channels, out_channels, 1, bias=False)
             for _ in range(num_sources)
         ])
 
-        # Lightweight cross-source attention (operates on out_channels, not in_channels)
-        hidden = max(num_sources * out_channels // reduction, num_sources)
-        self.source_attention = nn.Sequential(
-            nn.Linear(num_sources * out_channels, hidden),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden, num_sources),
-            nn.Softmax(dim=-1),
-        )
-        self.source_scale = nn.Parameter(torch.ones(num_sources))
+        if not uniform:
+            # Lightweight cross-source attention (operates on out_channels, not in_channels)
+            hidden = max(num_sources * out_channels // reduction, num_sources)
+            self.source_attention = nn.Sequential(
+                nn.Linear(num_sources * out_channels, hidden),
+                nn.ReLU(inplace=True),
+                nn.Linear(hidden, num_sources),
+                nn.Softmax(dim=-1),
+            )
+            self.source_scale = nn.Parameter(torch.ones(num_sources))
 
     def forward(self, raw_features: list) -> torch.Tensor:
         """
@@ -52,15 +56,17 @@ class AdaptiveFusionModule(nn.Module):
         # Project each source: [B, in_ch, Hp, Wp] → [B, out_ch, Hp, Wp]
         proj_feats = [self.proj[i](raw_features[i]) for i in range(self.num_sources)]
 
-        # Global pool each projected source for attention
-        pooled = [f.mean(dim=[2, 3]) for f in proj_feats]          # each [B, out_ch]
-        concat  = torch.cat(pooled, dim=-1)                         # [B, num_sources*out_ch]
-        weights = self.source_attention(concat)                      # [B, num_sources]
-        weights = F.softmax(weights * self.source_scale.unsqueeze(0), dim=-1)
-
-        # Weighted sum
-        fused = sum(weights[:, i].view(B, 1, 1, 1) * proj_feats[i]
-                    for i in range(self.num_sources))
+        if self.uniform:
+            # Ablation A5: simple average, no learned attention
+            fused = sum(proj_feats) / self.num_sources
+        else:
+            # Adaptive cross-source attention
+            pooled = [f.mean(dim=[2, 3]) for f in proj_feats]          # each [B, out_ch]
+            concat  = torch.cat(pooled, dim=-1)                         # [B, num_sources*out_ch]
+            weights = self.source_attention(concat)                      # [B, num_sources]
+            weights = F.softmax(weights * self.source_scale.unsqueeze(0), dim=-1)
+            fused = sum(weights[:, i].view(B, 1, 1, 1) * proj_feats[i]
+                        for i in range(self.num_sources))
         return fused
 
 
@@ -72,13 +78,15 @@ class Upnet_v3_MLMF(nn.Module):
               → upsample to target size → output conv.
     """
     def __init__(self, size, in_channels: int, out_channels: int = 256,
-                 num_sources: int = 6, fusion_reduction: int = 4):
+                 num_sources: int = 6, fusion_reduction: int = 4,
+                 fusion_uniform: bool = False):
         super().__init__()
         self.size = size
         self.num_sources = num_sources
 
         self.fusion = AdaptiveFusionModule(num_sources, in_channels,
-                                           out_channels, fusion_reduction)
+                                           out_channels, fusion_reduction,
+                                           uniform=fusion_uniform)
         self.conv_out = nn.Conv2d(out_channels, out_channels, 3, padding=1)
 
     def _to_spatial(self, feat, num_patches):

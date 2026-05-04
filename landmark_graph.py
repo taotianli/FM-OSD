@@ -93,6 +93,11 @@ def get_cephalometric_adjacency(num_landmarks: int = 19) -> torch.Tensor:
     return adj
 
 
+def get_dense_adjacency(num_landmarks: int) -> torch.Tensor:
+    """Fully-connected graph (including self-loops) for generic anatomy (e.g. Hand, 37 pts)."""
+    return torch.ones(num_landmarks, num_landmarks)
+
+
 def get_edge_index(adj: torch.Tensor) -> torch.Tensor:
     """Convert adjacency matrix to edge_index format for PyG-style processing."""
     edge_index = adj.nonzero(as_tuple=False).t().contiguous()
@@ -261,6 +266,7 @@ class TCGRModule(nn.Module):
         use_attention: bool = True,
         num_heads: int = 4,
         dropout: float = 0.1,
+        adjacency: str = "ceph",
     ):
         """
         Args:
@@ -273,6 +279,7 @@ class TCGRModule(nn.Module):
             use_attention: Whether to use GAT (True) or GCN (False)
             num_heads: Number of attention heads (if using GAT)
             dropout: Dropout rate
+            adjacency: \"ceph\" (19-point cephalometric edges), \"dense\" (fully connected)
         """
         super().__init__()
         self.num_landmarks = num_landmarks
@@ -317,7 +324,14 @@ class TCGRModule(nn.Module):
         )
         
         # Register anatomical adjacency matrix as buffer
-        adj = get_cephalometric_adjacency(num_landmarks)
+        if adjacency == "ceph":
+            if num_landmarks != 19:
+                raise ValueError(
+                    "adjacency='ceph' requires num_landmarks=19; use adjacency='dense' for other counts."
+                )
+            adj = get_cephalometric_adjacency(num_landmarks)
+        else:
+            adj = get_dense_adjacency(num_landmarks)
         self.register_buffer('adj', adj)
         
         # Learnable refinement scale (small initial value for stable training)

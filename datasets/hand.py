@@ -239,6 +239,76 @@ class Hand_SSL_Infer(Hand_Base):
         return len(self.list)
 
 
+class Hand_SSL_Infer_SSLv1_generate(Hand_Base):
+    """
+    Offline augmentation of the Hand one-shot template (mirrors
+    Head_SSL_Infer_SSLv1_generate for Cephalometric data).
+    """
+
+    def __init__(self, pathDataset, id_oneshot=0):
+        super().__init__(pathDataset=pathDataset, mode='Oneshot', id_shot=id_oneshot)
+        item = self.list[0]
+        img = self.images[item['ID']]
+        self.size = [img.size[1], img.size[0]]  # H, W
+        self.var = 1.0
+
+    def make_heatmap(self, landmark):
+        length, width = self.size
+        x, y = torch.meshgrid(
+            torch.arange(0, length),
+            torch.arange(0, width),
+        )
+        p = torch.stack([x, y], dim=2).float()
+        inner_factor = -1 / (2 * (self.var ** 2))
+        mean = torch.as_tensor(landmark).float()
+        heatmap = (p - mean).pow(2).sum(dim=-1)
+        heatmap = torch.exp(heatmap * inner_factor)
+        return heatmap
+
+    def image_aug(self, image_path, keypoint):
+        image = cv2.imread(image_path)
+        if image is None:
+            raise FileNotFoundError(image_path)
+
+        hms = []
+        for kp in keypoint:
+            hm = self.make_heatmap(
+                torch.tensor([float(kp[0]), float(kp[1])], dtype=torch.float32))
+            hms.append(hm.numpy())
+        hm = np.stack(hms, axis=2)
+
+        aug = Compose([
+            ShiftScaleRotate(
+                shift_limit=0.02, scale_limit=0.01, rotate_limit=5,
+                border_mode=cv2.BORDER_CONSTANT, value=0, mask_value=0,
+                always_apply=False, p=1.0),
+        ])
+        augmented = aug(image=image, mask=hm)
+        image_scaled = augmented['image']
+        mask_scaled = augmented['mask']
+
+        labnew = []
+        nchan = mask_scaled.shape[2]
+        for k in range(nchan):
+            mk = mask_scaled[:, :, k]
+            xi = np.where(mk == mk.max())[0][0]
+            yi = np.where(mk == mk.max())[1][0]
+            labnew.append([int(xi), int(yi)])
+
+        image = Image.fromarray(cv2.cvtColor(image_scaled, cv2.COLOR_BGR2RGB))
+        return image, labnew
+
+    def __getitem__(self, index):
+        item = self.list[index]
+        landmark_list = list(self.gts[item['ID']])
+        pth_img = os.path.join(self.pth_Image, item['ID'] + '.jpg')
+        image, landmark_list = self.image_aug(pth_img, landmark_list)
+        return image, landmark_list, pth_img
+
+    def __len__(self):
+        return len(self.list)
+
+
 class Hand_TPL_Heatmap(Hand_Base):
     def __init__(self, pathDataset, mode, size=[800, 640], do_repeat=True, ssl_dir=None, R_ratio=0.05, pseudo=True):
         super().__init__(pathDataset=pathDataset, size=size, mode=mode)

@@ -225,14 +225,16 @@ if __name__ == "__main__":
     
     parser.add_argument('--bs', default=4, type=int)
     parser.add_argument('--max_epoch', default=300, type=int)
-    parser.add_argument('--max_iterations', type=int, default=20000)
+    parser.add_argument('--max_iterations', type=int, default=8000)
     parser.add_argument('--lr', default=2e-4, type=float)
     parser.add_argument('--exp', default='global_mlmf', help='exp name.')
     
     # MLMF specific arguments
     parser.add_argument('--mlmf_layers', default='5,8,11', type=str, help='ViT layers for MLMF')
     parser.add_argument('--mlmf_facets', default='key,value', type=str, help='Facets for MLMF')
-    
+    parser.add_argument('--fusion_uniform', default='False', type=str2bool,
+                        help='Ablation A5: use uniform equal weights instead of learned attention')
+
     args = parser.parse_args()
     
     # Parse MLMF config
@@ -267,13 +269,15 @@ if __name__ == "__main__":
     
     image_size = (image.shape[-2], image.shape[-1])
     
-    # Use MLMF network instead of original Upnet_v3
+    # Each source is a 6528-dim log-bin descriptor (384 embed × 17 bins)
+    in_channels = 6528
     model_post = Upnet_v3_MLMF(
-        size=image_size, 
-        in_channels=6528, 
+        size=image_size,
+        in_channels=in_channels,
         out_channels=256,
         num_sources=mlmf_config['num_sources'],
-        fusion_reduction=4
+        fusion_reduction=4,
+        fusion_uniform=args.fusion_uniform
     ).cuda()
     model_post.train()
     

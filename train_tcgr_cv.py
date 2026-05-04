@@ -31,20 +31,20 @@ def str2bool(v):
 # ---------------------------------------------------------------------------
 # Load all cached predictions + GT for all 400 images
 # ---------------------------------------------------------------------------
-def load_all_cache(train_cache_dir, test_cache_dir, dataset_pth):
-    """Returns list of (img_id, pred [N,2], gt [N,2]) for all 400 images."""
+def load_all_cache(train_cache_dir, test_cache_dir, dataset_pth, num_gt_landmarks=19):
+    """Load cached predictions. GT from JSON if present, else from Cephalometric labels."""
     label_junior = os.path.join(dataset_pth, '400_junior')
     label_senior = os.path.join(dataset_pth, '400_senior')
 
-    def read_gt(img_id):
+    def read_gt_ceph(img_id):
         gt = []
         with open(os.path.join(label_junior, img_id + '.txt')) as f1, \
              open(os.path.join(label_senior, img_id + '.txt')) as f2:
-            for _ in range(19):
+            for _ in range(num_gt_landmarks):
                 l1 = f1.readline().split()[0].split(',')
                 l2 = f2.readline().split()[0].split(',')
                 lm = [int(0.5 * (int(l1[k]) + int(l2[k]))) for k in range(len(l1))]
-                gt.append([lm[1], lm[0]])  # [y, x]
+                gt.append([lm[1], lm[0]])
         return gt
 
     all_items = []
@@ -58,7 +58,10 @@ def load_all_cache(train_cache_dir, test_cache_dir, dataset_pth):
         with open(cache_f) as f:
             data = json.load(f)
         pred = data['pred'] if isinstance(data, dict) else data
-        gt   = data['gt']  if isinstance(data, dict) else read_gt(img_id)
+        if isinstance(data, dict) and data.get('gt') is not None:
+            gt = data['gt']
+        else:
+            gt = read_gt_ceph(img_id)
         all_items.append((img_id, pred, gt))
 
     # Test images 151-400
@@ -70,10 +73,35 @@ def load_all_cache(train_cache_dir, test_cache_dir, dataset_pth):
         with open(cache_f) as f:
             data = json.load(f)
         pred = data['pred'] if isinstance(data, dict) else data
-        gt   = data['gt']  if isinstance(data, dict) else read_gt(img_id)
+        if isinstance(data, dict) and data.get('gt') is not None:
+            gt = data['gt']
+        else:
+            gt = read_gt_ceph(img_id)
         all_items.append((img_id, pred, gt))
 
     print(f"Total cached samples: {len(all_items)}")
+    return all_items
+
+
+def load_all_cache_hand(train_cache_dir, test_cache_dir):
+    """Hand: all JSON files must contain pred + gt (37 landmarks)."""
+    all_items = []
+    for split_dir in (train_cache_dir, test_cache_dir):
+        if not os.path.isdir(split_dir):
+            continue
+        for fname in sorted(os.listdir(split_dir)):
+            if not fname.endswith('.json'):
+                continue
+            img_id = fname.replace('.json', '')
+            pth = os.path.join(split_dir, fname)
+            with open(pth) as f:
+                data = json.load(f)
+            pred = data['pred']
+            gt = data['gt']
+            if len(pred) != len(gt):
+                continue
+            all_items.append((img_id, pred, gt))
+    print(f"Total Hand cached samples: {len(all_items)}")
     return all_items
 
 
@@ -95,11 +123,12 @@ class CachedListDataset(torch.utils.data.Dataset):
 # ---------------------------------------------------------------------------
 def train_fold(fold_idx, train_items, val_items, args, device, fold_writer):
     tcgr = TCGRModule(
-        num_landmarks=19, coord_dim=2, score_dim=1,
+        num_landmarks=args.num_landmarks, coord_dim=2, score_dim=1,
         feature_dim=args.tcgr_feature_dim,
         hidden_dim=args.tcgr_hidden_dim,
         num_layers=args.tcgr_num_layers,
-        use_attention=args.tcgr_use_attention
+        use_attention=args.tcgr_use_attention,
+        adjacency=args.tcgr_adjacency,
     ).to(device)
 
     loss_fn   = TCGRLoss(coord_weight=args.coord_loss_weight,
@@ -200,9 +229,30 @@ if __name__ == "__main__":
     parser.add_argument('--coord_loss_weight',  default=1.0, type=float)
     parser.add_argument('--topo_loss_weight',   default=0.2, type=float)
 
+    parser.add_argument('--dataset', type=str, default='ceph',
+                        choices=['ceph', 'hand'],
+                        help='ceph: Cephalometric 400 images; hand: JSON caches with 37 landmarks')
+    parser.add_argument('--num_landmarks', type=int, default=None)
+    parser.add_argument('--tcgr_adjacency', type=str, default='auto',
+                        choices=['auto', 'ceph', 'dense'])
+
     args = parser.parse_args()
 
     random_seed = 2022
+    if args.dataset == 'ceph':
+        args.num_landmarks = args.num_landmarks or 19
+        if args.tcgr_adjacency == 'auto':
+            args.tcgr_adjacency = 'ceph'
+    elif args.dataset == 'hand':
+        args.num_landmarks = args.num_landmarks or 37
+        if args.tcgr_adjacency == 'auto':
+            args.tcgr_adjacency = 'dense'
+        ins = list(args.input_size) if args.input_size is not None else [2400, 1935]
+        if ins == [2400, 1935]:
+            args.input_size = [2600, 2600]
+        else:
+            args.input_size = ins
+
     random.seed(random_seed)
     np.random.seed(random_seed)
     torch.manual_seed(random_seed)
@@ -213,7 +263,12 @@ if __name__ == "__main__":
 
     train_cache = os.path.join(args.cache_dir, 'train')
     test_cache  = os.path.join(args.cache_dir, 'test')
-    all_items   = load_all_cache(train_cache, test_cache, args.dataset_pth)
+    if args.dataset == 'ceph':
+        all_items = load_all_cache(
+            train_cache, test_cache, args.dataset_pth,
+            num_gt_landmarks=args.num_landmarks)
+    else:
+        all_items = load_all_cache_hand(train_cache, test_cache)
 
     # Shuffle with fixed seed for reproducibility
     rng = np.random.RandomState(2022)
@@ -249,10 +304,10 @@ if __name__ == "__main__":
         all_fold_preds.extend(preds)
         all_fold_gts.extend(gts)
 
-        # Per-fold metrics
+        # Per-fold metrics — name includes exp so experiments don't overwrite each other
         evaluater = Evaluater(
             preds, gts, args.eval_radius, eval_dir,
-            name=f'tcgr_cv_fold{fold+1}', spacing=[0.1, 0.1])
+            name=f'{args.exp}_fold{fold+1}', spacing=[0.1, 0.1])
         evaluater.calculate()
         evaluater.cal_metrics()
         print(f"Fold {fold+1} MRE: {evaluater.mre:.4f} mm")
@@ -266,7 +321,7 @@ if __name__ == "__main__":
     print("FINAL 5-fold CV results on ALL 400 images:")
     overall_eval = Evaluater(
         all_fold_preds, all_fold_gts, args.eval_radius, eval_dir,
-        name='tcgr_cv_all400', spacing=[0.1, 0.1])
+        name=f'{args.exp}_all400', spacing=[0.1, 0.1])
     overall_eval.calculate()
     overall_eval.cal_metrics()
     print(f"Overall MRE: {overall_eval.mre:.4f} mm")
