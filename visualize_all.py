@@ -159,16 +159,101 @@ def plot_qualitative(dataset_pth, fmosd_cache_dir, mlmf_cache_dir,
 # ---------------------------------------------------------------------------
 # V2: Per-landmark MRE bar chart
 # ---------------------------------------------------------------------------
-def plot_per_landmark_mre(fmosd_cache_dir, mlmf_cache_dir, out_dir):
-    """Horizontal bar chart: per-landmark MRE for FM-OSD vs MLMF+TCGR."""
-    fmosd_train = load_cache(fmosd_cache_dir, 'train')
-    fmosd_test  = load_cache(fmosd_cache_dir, 'test')
-    mlmf_train  = load_cache(mlmf_cache_dir,  'train')
-    mlmf_test   = load_cache(mlmf_cache_dir,  'test')
+def _infer_tcgr_folds(mlmf_cache_dir, model_dir, input_size,
+                      num_landmarks=19, feature_dim=64, hidden_dim=128,
+                      num_layers=3, n_folds=5):
+    """
+    Replay TCGR 5-fold CV inference with saved fold models.
+    Returns list of (pred_np, gt_np) for all 400 images in the original fold order.
+    Uses the same seed-2022 permutation as train_tcgr_cv.py.
+    """
+    import torch
+    from landmark_graph import TCGRModule, normalize_coordinates, denormalize_coordinates
 
+    # Re-build all_items in the same order
+    def _load_items(split):
+        d = os.path.join(mlmf_cache_dir, split)
+        items = []
+        for f in sorted(glob.glob(os.path.join(d, '*.json'))):
+            img_id = os.path.basename(f).replace('.json', '')
+            with open(f) as fp:
+                data = json.load(fp)
+            pred = data['pred'] if isinstance(data, dict) else data
+            gt   = data.get('gt') if isinstance(data, dict) else None
+            if gt is not None:
+                items.append((img_id, pred, gt))
+        return items
+
+    all_items = _load_items('train') + _load_items('test')
+    rng = np.random.RandomState(2022)
+    perm = rng.permutation(len(all_items))
+    all_items = [all_items[i] for i in perm]
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    fold_size = len(all_items) // n_folds
+
+    result_preds = [None] * len(all_items)
+    result_gts   = [None] * len(all_items)
+
+    for fold in range(n_folds):
+        val_start = fold * fold_size
+        val_end   = val_start + fold_size if fold < n_folds - 1 else len(all_items)
+        val_idx   = list(range(val_start, val_end))
+        val_items = [all_items[i] for i in val_idx]
+
+        ckpt_path = os.path.join(model_dir, f'tcgr_fold{fold+1}.pth')
+        if not os.path.exists(ckpt_path):
+            print(f"  WARNING: {ckpt_path} not found, skipping fold {fold+1}")
+            continue
+
+        tcgr = TCGRModule(
+            num_landmarks=num_landmarks, coord_dim=2, score_dim=1,
+            feature_dim=feature_dim, hidden_dim=hidden_dim,
+            num_layers=num_layers, use_attention=True, adjacency='ceph'
+        ).to(device)
+        state = torch.load(ckpt_path, map_location=device)
+        tcgr.load_state_dict(state)
+        tcgr.eval()
+
+        with torch.no_grad():
+            for local_i, (img_id, pred, gt) in enumerate(val_items):
+                init_c = torch.tensor([pred], dtype=torch.float32).to(device)
+                init_n = normalize_coordinates(init_c, input_size)
+                dummy_s = torch.ones(1, num_landmarks, device=device)
+                dummy_f = torch.zeros(1, num_landmarks, feature_dim, device=device)
+                refined_n, _ = tcgr(init_n, dummy_s, dummy_f)
+                refined = denormalize_coordinates(refined_n, input_size)
+                global_i = val_idx[local_i]
+                result_preds[global_i] = refined[0].cpu().numpy()
+                result_gts[global_i]   = np.array(gt)
+
+    # Filter any None (failed folds)
+    preds_out = [p for p in result_preds if p is not None]
+    gts_out   = [g for g in result_gts   if g is not None]
+    return preds_out, gts_out
+
+
+def plot_per_landmark_mre(fmosd_cache_dir, mlmf_cache_dir, out_dir,
+                          tcgr_model_dir='models/tcgr_cv_mlmf',
+                          input_size=None):
+    """
+    Horizontal bar chart: FM-OSD baseline (pre-TCGR) vs MLMF+TCGR (post-TCGR fold inference).
+    """
+    if input_size is None:
+        input_size = [2400, 1935]
+
+    # FM-OSD baseline: pre-TCGR predictions on test set (ground truth available)
+    fmosd_test  = load_cache(fmosd_cache_dir, 'test')
     dset = '/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/'
-    mre_f = compute_mre_per_landmark(fmosd_train, fmosd_test, dataset_pth=dset)
-    mre_m = compute_mre_per_landmark(mlmf_train,  mlmf_test,  dataset_pth=dset)
+    mre_f = compute_mre_per_landmark({}, fmosd_test, dataset_pth=dset)
+
+    # MLMF+TCGR: post-TCGR via fold model inference on all 400 images
+    print("  Running TCGR fold inference for post-TCGR per-landmark MRE...")
+    preds_m, gts_m = _infer_tcgr_folds(
+        mlmf_cache_dir, tcgr_model_dir, input_size)
+    errors_m = np.sqrt(((np.array(preds_m) - np.array(gts_m))**2).sum(axis=-1)) * 0.1
+    mre_m = errors_m.mean(axis=0)
+    print(f"  FM-OSD baseline MRE={mre_f.mean():.4f}mm  |  MLMF+TCGR MRE={mre_m.mean():.4f}mm")
 
     idx   = np.arange(19)
     h     = 0.35
@@ -304,8 +389,9 @@ if __name__ == '__main__':
         default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache_mlmf')
     parser.add_argument('--output_dir', default='figures')
     parser.add_argument('--qualitative_ids',
-        default='160,170,183,200,230',
-        help='Comma-separated test image IDs for V1 qualitative figure')
+        default='262,197,330,359,304',
+        help='Comma-separated test image IDs for V1 qualitative figure'
+             ' (chosen where FM-OSD MRE > MLMF+TCGR MRE)')
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -319,7 +405,9 @@ if __name__ == '__main__':
 
     # ------ V2: Per-landmark MRE ------
     print("\n--- V2: Per-landmark MRE bar chart ---")
-    plot_per_landmark_mre(args.fmosd_cache, args.mlmf_cache, args.output_dir)
+    plot_per_landmark_mre(args.fmosd_cache, args.mlmf_cache, args.output_dir,
+                          tcgr_model_dir='models/tcgr_cv_mlmf',
+                          input_size=[2400, 1935])
 
     # ------ V3: MLMF attention ------
     print("\n--- V3: Attention weight heatmap ---")
