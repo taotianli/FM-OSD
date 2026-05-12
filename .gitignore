@@ -18,11 +18,15 @@ dataset/
 logs/
 logs_*.txt
 
-# Model checkpoints (large binaries — track only specific small ones if needed)
-models/**/*.pth
-models/**/*.pt
-# Allow directory structure markers
-!models/**/.gitkeep
+# Model weights and checkpoints (all large binaries)
+models/
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
+*.pkl
 
 # TCGR cache (large JSON prediction files)
 data/tcgr_cache/
