@@ -14,13 +14,19 @@ from PIL import Image
 import numpy as np
 import ipdb
 import random
-import bin_cuda
+try:
+    import bin_cuda
+    _BIN_CUDA_AVAILABLE = True
+except ImportError:
+    _BIN_CUDA_AVAILABLE = False
+
 from torch.autograd import Function
 class BINFunction(Function):
     @staticmethod
     def forward(ctx, avg_pools, B, sub_desc_dim, num_bins, num_patches0, num_patches1, hierarchy):
+        if not _BIN_CUDA_AVAILABLE:
+            raise RuntimeError("bin_cuda is not compiled. Use --bin False to disable log-binning.")
         outputs = bin_cuda.forward(avg_pools, B, sub_desc_dim, num_bins, num_patches0, num_patches1, hierarchy)
-
         return outputs[0]
 
 class ViTExtractor:
