@@ -24,14 +24,10 @@ source ~/miniforge3/etc/profile.d/conda.sh
 conda activate fmosd
 cd $WORK
 
-# ── Step 1: data_generate (augmented training images) ─────────────────────────
-echo "=== Step 1: data_generate ==="
-python data_generate.py \
-    --dataset_pth $DATA \
-    --id_shot 125
+# Step 1 (data_generate) skipped — training images already exist in data/head/
 
 # ── Step 2: precompute MLMF feature cache (1 ViT pass per image, saved to /projects) ──
-echo "=== Step 2: precompute_head_features ==="
+echo "=== Step 1: precompute_head_features ==="
 python precompute_head_features.py \
     --dataset_pth $DATA \
     --cache_dir $CACHE/feat_head \
@@ -40,7 +36,7 @@ python precompute_head_features.py \
     --stride 4
 
 # ── Step 3: Train global branch (MSSR) ────────────────────────────────────────
-echo "=== Step 3: train1_mssr (global) ==="
+echo "=== Step 2: train1_mssr (global) ==="
 python train1_mssr.py \
     --dataset_pth $DATA \
     --feat_cache_dir $CACHE/feat_head \
@@ -53,7 +49,7 @@ python train1_mssr.py \
     --save_dir $WORK/output
 
 # ── Step 4: Train local branch (MSSR coarse-to-fine) ──────────────────────────
-echo "=== Step 4: train2_mssr (local) ==="
+echo "=== Step 3: train2_mssr (local) ==="
 GLOBAL_CKPT=$(ls $WORK/models/global_mssr/model_post_mssr_iter_*_*.pth 2>/dev/null | sort -t_ -k6 -rn | head -1)
 if [ -z "$GLOBAL_CKPT" ]; then
     GLOBAL_CKPT=$WORK/models/global_mssr/model_post_mssr_final.pth
