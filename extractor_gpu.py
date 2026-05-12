@@ -55,9 +55,12 @@ class ViTExtractor:
         self.model.eval()
         self.model.to(self.device)
         # ipdb.set_trace()
-        self.p = self.model.patch_embed.patch_size
+        _patch_size = self.model.patch_embed.patch_size
+        # DINOv2 returns patch_size as a tuple; normalize to int
+        self.p = _patch_size[0] if isinstance(_patch_size, tuple) else _patch_size
         self.stride = self.model.patch_embed.proj.stride
 
+        # Both DINO and DINOv2 use ImageNet normalization
         self.mean = (0.485, 0.456, 0.406) if "dino" in self.model_type else (0.5, 0.5, 0.5)
         self.std = (0.229, 0.224, 0.225) if "dino" in self.model_type else (0.5, 0.5, 0.5)
 
@@ -69,21 +72,30 @@ class ViTExtractor:
     @staticmethod
     def create_model(model_type: str) -> nn.Module:
         """
-        :param model_type: a string specifying which model to load. [dino_vits8 | dino_vits16 | dino_vitb8 |
-                           dino_vitb16 | vit_small_patch8_224 | vit_small_patch16_224 | vit_base_patch8_224 |
-                           vit_base_patch16_224]
+        :param model_type: a string specifying which model to load.
+                           DINO: [dino_vits8 | dino_vits16 | dino_vitb8 | dino_vitb16]
+                           DINOv2: [dinov2_vits14 | dinov2_vitb14 | dinov2_vitl14 | dinov2_vitg14]
+                           timm: [vit_small_patch8_224 | vit_small_patch16_224 | vit_base_patch8_224 | vit_base_patch16_224]
         :return: the model
         """
-        # Use local cache first, fall back to remote download
         hub_dir = '/home/taotl/.cache/torch/hub'
         dino_local = f'{hub_dir}/facebookresearch_dino_main'
-        
-        if 'dino' in model_type:
+        dinov2_local = f'{hub_dir}/facebookresearch_dinov2_main'
+
+        if model_type.startswith('dinov2_'):
+            # DINOv2 models (patch_size=14, standard ImageNet normalization)
+            if os.path.exists(dinov2_local):
+                model = torch.hub.load(dinov2_local, model_type, source='local')
+            else:
+                model = torch.hub.load('facebookresearch/dinov2', model_type)
+        elif 'dino' in model_type:
+            # Original DINO models (patch_size=8 or 16)
             if os.path.exists(dino_local):
                 model = torch.hub.load(dino_local, model_type, source='local')
             else:
                 model = torch.hub.load('facebookresearch/dino:main', model_type)
-        else:  # model from timm -- load weights from timm to dino model (enables working on arbitrary size images).
+        else:
+            # timm models — load weights into DINO architecture for variable-resolution support
             temp_model = timm.create_model(model_type, pretrained=True)
             model_type_dict = {
                 'vit_small_patch16_224': 'dino_vits16',
@@ -101,6 +113,44 @@ class ViTExtractor:
             del temp_state_dict['head.bias']
             model.load_state_dict(temp_state_dict)
         return model
+
+    @staticmethod
+    def get_embed_dim(model_type: str) -> int:
+        """Return the token embedding dimension for the given model type."""
+        if model_type.startswith('sam_'):
+            return {'sam_vit_b': 768, 'sam_vit_l': 1024}[model_type]
+        if 'vits' in model_type or 'small' in model_type:
+            return 384
+        elif 'vitb' in model_type or 'base' in model_type:
+            return 768
+        elif 'vitl' in model_type or 'large' in model_type:
+            return 1024
+        elif 'vitg' in model_type or 'giant' in model_type:
+            return 1536
+        else:
+            raise ValueError(f"Cannot infer embed_dim for model_type: {model_type}")
+
+    @staticmethod
+    def get_default_stride(model_type: str) -> int:
+        """Return the recommended stride for the given model type.
+        DINOv2 uses patch_size=14, so stride must divide 14 (use 7 for 2x resolution).
+        SAM uses patch_size=16 (stride fixed at 16 — no stride modification supported).
+        DINO uses patch_size=8, default stride=4.
+        """
+        if model_type.startswith('dinov2_'):
+            return 7
+        if model_type.startswith('sam_'):
+            return 16
+        return 4
+
+    @staticmethod
+    def get_desc_dim(model_type: str, hierarchy: int = 2) -> int:
+        """Return the binned descriptor dimension per (layer, facet) source.
+        With log-binning: num_bins = 1 + 8*hierarchy, descriptor = embed_dim * num_bins.
+        """
+        embed_dim = ViTExtractor.get_embed_dim(model_type)
+        num_bins = 1 + 8 * hierarchy
+        return embed_dim * num_bins
 
     @staticmethod
     def _fix_pos_enc(patch_size: int, stride_hw: Tuple[int, int]):
@@ -147,17 +197,18 @@ class ViTExtractor:
         :return: the adjusted model
         """
         patch_size = model.patch_embed.patch_size
-        if stride == patch_size:  
+        # DINOv2 returns patch_size as a tuple (e.g., (14, 14)); normalize to int
+        patch_size_int = patch_size[0] if isinstance(patch_size, tuple) else patch_size
+        if stride == patch_size_int:
             return model
 
-        stride = nn_utils._pair(stride)  
-        assert all([(patch_size // s_) * s_ == patch_size for s_ in
-                    stride]), f'stride {stride} should divide patch_size {patch_size}'   
+        stride = nn_utils._pair(stride)
+        assert all([(patch_size_int // s_) * s_ == patch_size_int for s_ in stride]), \
+            f'stride {stride} should divide patch_size {patch_size_int}'
 
-        # fix the stride
-        model.patch_embed.proj.stride = stride  
-        # fix the positional encoding code
-        model.interpolate_pos_encoding = types.MethodType(ViTExtractor._fix_pos_enc(patch_size, stride), model)
+        model.patch_embed.proj.stride = stride
+        model.interpolate_pos_encoding = types.MethodType(
+            ViTExtractor._fix_pos_enc(patch_size_int, stride), model)
         return model
 
     def preprocess(self, image_path: Union[str, Path],
@@ -391,12 +442,21 @@ class ViTExtractor:
                   if facet is 'token' has shape Bxtxd
         """
         B, C, H, W = batch.shape
+        # DINOv2 requires H and W to be exact multiples of patch_size.
+        # When load_size is set via transforms.Resize(int) the longer side may not
+        # be divisible by p=14. Pad with zeros to the nearest multiple.
+        pad_h = (self.p - H % self.p) % self.p
+        pad_w = (self.p - W % self.p) % self.p
+        if pad_h > 0 or pad_w > 0:
+            batch = torch.nn.functional.pad(batch, (0, pad_w, 0, pad_h))
+        H_eff = H + pad_h
+        W_eff = W + pad_w
         self._feats = []
         self._register_hooks(layers, facet)
         _ = self.model(batch)
         self._unregister_hooks()
         self.load_size = (H, W)
-        self.num_patches = (1 + (H - self.p) // self.stride[0], 1 + (W - self.p) // self.stride[1])
+        self.num_patches = (1 + (H_eff - self.p) // self.stride[0], 1 + (W_eff - self.p) // self.stride[1])
         return self._feats
 
     def _log_bin(self, x: torch.Tensor, hierarchy: int = 2) -> torch.Tensor:
@@ -473,47 +533,109 @@ class ViTExtractor:
         cls_attn_maps = (cls_attn_map - temp_mins) / (temp_maxs - temp_mins)  # normalize to range [0,1]
         return cls_attn_maps
 
+    def _register_hooks_multi_facet(
+        self,
+        layers: List[int],
+        facets: List[str],
+        storage: dict,
+    ) -> None:
+        """
+        Register hooks for multiple (layer, facet) pairs in one pass.
+        Captured tensors are written into `storage[(layer, facet)]`.
+        This avoids re-running the ViT for each facet separately.
+        """
+        facet_to_idx = {'query': 0, 'key': 1, 'value': 2}
+        qkv_facets = [f for f in facets if f in facet_to_idx]
+        has_token   = 'token' in facets
+
+        for block_idx, block in enumerate(self.model.blocks):
+            if block_idx not in layers:
+                continue
+
+            # QKV facets: one hook on the attention module captures Q, K, V together
+            if qkv_facets:
+                def _make_qkv_hook(blk_idx, facets_to_capture):
+                    def _hook(module, inp, output):
+                        i = inp[0]
+                        B, N, C = i.shape
+                        qkv = (module.qkv(i)
+                               .reshape(B, N, 3, module.num_heads, C // module.num_heads)
+                               .permute(2, 0, 3, 1, 4))
+                        for f in facets_to_capture:
+                            storage[(blk_idx, f)] = qkv[facet_to_idx[f]]
+                    return _hook
+                self.hook_handlers.append(
+                    block.attn.register_forward_hook(
+                        _make_qkv_hook(block_idx, qkv_facets)
+                    )
+                )
+
+            # Token facet: hook on the block output
+            if has_token:
+                def _make_token_hook(blk_idx):
+                    def _hook(module, inp, output):
+                        storage[(blk_idx, 'token')] = output
+                    return _hook
+                self.hook_handlers.append(
+                    block.register_forward_hook(_make_token_hook(block_idx))
+                )
+
     def extract_multi_layer_multi_facet_descriptors(
-        self, 
-        batch: torch.Tensor, 
-        layers: List[int] = [5, 8, 11], 
+        self,
+        batch: torch.Tensor,
+        layers: List[int] = [5, 8, 11],
         facets: List[str] = ['key', 'value'],
-        bin: bool = True, 
+        bin: bool = True,
         include_cls: bool = False
     ) -> List[torch.Tensor]:
         """
-        MLMF: Extract descriptors from multiple layers and multiple facets.
-        This enables adaptive feature fusion for anatomy-specific landmark detection.
-        
+        MLMF: Extract descriptors from multiple layers and multiple facets in a
+        **single ViT forward pass** instead of one pass per (layer, facet) pair.
+
         :param batch: batch to extract descriptors for. Has shape BxCxHxW.
-        :param layers: list of layers to extract (e.g., [5, 8, 11] for shallow/mid/deep).
+        :param layers: list of layers to extract (e.g., [5, 8, 11]).
         :param facets: list of facets to extract (e.g., ['key', 'value']).
         :param bin: apply log binning to the descriptor.
-        :return: list of descriptors, one for each (layer, facet) combination.
-                 Each has shape Bx1xtxd' where d' is the descriptor dimension.
+        :return: list of descriptors ordered as (layer0,facet0), (layer0,facet1), …
+                 Each has shape Bx1xtxd'.
         """
+        for facet in facets:
+            assert facet in ['key', 'query', 'value', 'token'], \
+                f"{facet} is not a supported facet."
+
+        B, C, H, W = batch.shape
+        pad_h = (self.p - H % self.p) % self.p
+        pad_w = (self.p - W % self.p) % self.p
+        if pad_h > 0 or pad_w > 0:
+            batch = torch.nn.functional.pad(batch, (0, pad_w, 0, pad_h))
+        H_eff = H + pad_h
+        W_eff = W + pad_w
+
+        storage: dict = {}
+        self._register_hooks_multi_facet(layers, facets, storage)
+        _ = self.model(batch)
+        self._unregister_hooks()
+
+        self.load_size  = (H, W)
+        self.num_patches = (
+            1 + (H_eff - self.p) // self.stride[0],
+            1 + (W_eff - self.p) // self.stride[1],
+        )
+
         all_descriptors = []
-        
         for layer in layers:
             for facet in facets:
-                assert facet in ['key', 'query', 'value', 'token'], \
-                    f"{facet} is not a supported facet."
-                
-                self._extract_features(batch, [layer], facet)
-                x = self._feats[0]
-                
+                x = storage[(layer, facet)]
                 if facet == 'token':
-                    x.unsqueeze_(dim=1)
+                    x = x.unsqueeze(1)
                 if not include_cls:
                     x = x[:, :, 1:, :]
-                
                 if not bin:
-                    desc = x.permute(0, 2, 3, 1).flatten(start_dim=-2, end_dim=-1).unsqueeze(dim=1)
+                    desc = x.permute(0, 2, 3, 1).flatten(start_dim=-2, end_dim=-1).unsqueeze(1)
                 else:
                     desc = self._log_bin(x)
-                
                 all_descriptors.append(desc)
-        
+
         return all_descriptors
     
     def get_mlmf_config(self) -> dict:
@@ -523,6 +645,171 @@ class ViTExtractor:
             'facets': ['key', 'value'],
             'num_sources': 6,  # 3 layers x 2 facets
         }
+
+class SAMExtractor:
+    """Feature extractor for SAM (Segment Anything Model) image encoders.
+
+    Supports sam_vit_b (embed_dim=768, 12 blocks) and sam_vit_l (embed_dim=1024, 24 blocks).
+    SAM uses patch_size=16, so for load_size=224 the feature grid is 14×14.
+    The positional embedding is interpolated from SAM's native 64×64 (1024px) to the
+    actual input resolution so that any load_size can be used.
+    """
+
+    SAM_CKPT_PATHS = {
+        'sam_vit_b': '/home/taotl/Desktop/FM-OSD/models/sam/sam_vit_b_01ec64.pth',
+        'sam_vit_l': '/home/taotl/Desktop/FM-OSD/models/sam/sam_vit_l_0b3195.pth',
+    }
+
+    EMBED_DIMS = {'sam_vit_b': 768, 'sam_vit_l': 1024}
+
+    def __init__(self, model_type: str = 'sam_vit_b', device: str = 'cuda'):
+        from segment_anything import sam_model_registry
+        self.model_type = model_type
+        self.device = device
+
+        var = model_type.replace('sam_', '')  # 'vit_b' or 'vit_l'
+        ckpt = self.SAM_CKPT_PATHS[model_type]
+        sam = sam_model_registry[var](checkpoint=ckpt)
+        self.model = sam.image_encoder
+        self.model.eval()
+        self.model.to(self.device)
+
+        self.p = self.model.patch_embed.proj.kernel_size[0]  # 16
+        self.stride = (self.p, self.p)
+        # SAM uses same ImageNet normalization as DINO
+        self.mean = (0.485, 0.456, 0.406)
+        self.std = (0.229, 0.224, 0.225)
+
+        self._feats = []
+        self.hook_handlers = []
+        self.load_size = None
+        self.num_patches = None
+
+    @staticmethod
+    def get_embed_dim(model_type: str) -> int:
+        return SAMExtractor.EMBED_DIMS[model_type]
+
+    @staticmethod
+    def get_default_stride(model_type: str) -> int:
+        return 16  # SAM patch_size is always 16
+
+    @staticmethod
+    def get_desc_dim(model_type: str, hierarchy: int = 2) -> int:
+        embed_dim = SAMExtractor.get_embed_dim(model_type)
+        num_bins = 1 + 8 * hierarchy
+        return embed_dim * num_bins
+
+    def _patch_pos_embed(self, H: int, W: int) -> None:
+        """Interpolate SAM's fixed pos_embed to match the given spatial size."""
+        if self.model.pos_embed is None:
+            return
+        ph, pw = H // self.p, W // self.p
+        if self.model.pos_embed.shape[1] == ph and self.model.pos_embed.shape[2] == pw:
+            return
+        orig = self.model.pos_embed  # [1, H0, W0, C]
+        orig_perm = orig.permute(0, 3, 1, 2)  # [1, C, H0, W0]
+        interp = torch.nn.functional.interpolate(
+            orig_perm, size=(ph, pw), mode='bicubic', align_corners=False)
+        self.model.pos_embed = nn.Parameter(interp.permute(0, 2, 3, 1))  # [1, ph, pw, C]
+
+    def _get_hook(self, facet: str):
+        """Hook for SAM's Attention module whose input is [B, H, W, C] (4-D)."""
+        if facet in ['attn', 'token']:
+            def _hook(model, input, output):
+                self._feats.append(output)
+            return _hook
+
+        if facet == 'query':   facet_idx = 0
+        elif facet == 'key':   facet_idx = 1
+        elif facet == 'value': facet_idx = 2
+        else: raise TypeError(f"{facet} is not a supported facet.")
+
+        def _inner_hook(module, input, output):
+            x = input[0]  # [B, H, W, C]
+            B, H, W, C = x.shape
+            N = H * W
+            # SAM's Attention.qkv: Linear(C, 3*C)
+            qkv = module.qkv(x).reshape(B, N, 3, module.num_heads, C // module.num_heads)
+            qkv = qkv.permute(2, 0, 3, 1, 4)  # [3, B, heads, N, d]
+            self._feats.append(qkv[facet_idx])  # [B, heads, N, d]
+        return _inner_hook
+
+    def _register_hooks(self, layers: List[int], facet: str) -> None:
+        for block_idx, block in enumerate(self.model.blocks):
+            if block_idx in layers:
+                if facet == 'token':
+                    self.hook_handlers.append(block.register_forward_hook(self._get_hook(facet)))
+                elif facet in ['key', 'query', 'value']:
+                    self.hook_handlers.append(block.attn.register_forward_hook(self._get_hook(facet)))
+                else:
+                    raise TypeError(f"{facet} is not a supported facet.")
+
+    def _unregister_hooks(self) -> None:
+        for handle in self.hook_handlers:
+            handle.remove()
+        self.hook_handlers = []
+
+    def _extract_features(self, batch: torch.Tensor, layers: List[int], facet: str) -> List[torch.Tensor]:
+        B, C, H, W = batch.shape
+        self._patch_pos_embed(H, W)
+        self._feats = []
+        self._register_hooks(layers, facet)
+        _ = self.model(batch)
+        self._unregister_hooks()
+        self.load_size = (H, W)
+        self.num_patches = (H // self.p, W // self.p)
+        return self._feats
+
+    def _log_bin(self, x: torch.Tensor, hierarchy: int = 2) -> torch.Tensor:
+        """Reuse ViTExtractor._log_bin via delegation."""
+        B = x.shape[0]
+        num_bins = 1 + 8 * hierarchy
+        bin_x = x.permute(0, 2, 3, 1).flatten(start_dim=-2, end_dim=-1)
+        bin_x = bin_x.permute(0, 2, 1)
+        bin_x = bin_x.reshape(B, bin_x.shape[1], self.num_patches[0], self.num_patches[1])
+        sub_desc_dim = bin_x.shape[1]
+        avg_pools = []
+        for k in range(0, hierarchy):
+            win_size = 3 ** k
+            avg_pool = torch.nn.AvgPool2d(win_size, stride=1, padding=win_size // 2, count_include_pad=False)
+            avg_pools.append(avg_pool(bin_x))
+        avg_pools = torch.stack(avg_pools, dim=0).contiguous()
+        bin_x = BINFunction.apply(avg_pools, B, sub_desc_dim, num_bins,
+                                  self.num_patches[0], self.num_patches[1], hierarchy)
+        torch.cuda.synchronize()
+        bin_x = bin_x.flatten(start_dim=-2, end_dim=-1).permute(0, 2, 1).unsqueeze(dim=1)
+        return bin_x
+
+    def preprocess(self, image_path, load_size=None):
+        """Same interface as ViTExtractor.preprocess."""
+        pil_image = Image.open(image_path).convert('RGB')
+        if load_size is not None:
+            pil_image = transforms.Resize(load_size, interpolation=transforms.InterpolationMode.LANCZOS)(pil_image)
+        prep = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=self.mean, std=self.std)
+        ])
+        return prep(pil_image)[None, ...], pil_image
+
+    def extract_descriptors(self, batch: torch.Tensor, layer: int = 11, facet: str = 'key',
+                            bin: bool = False, include_cls: bool = False) -> torch.Tensor:
+        assert facet in ['key', 'query', 'value'], f"{facet} not supported for SAM (no CLS token)."
+        self._extract_features(batch, [layer], facet)
+        x = self._feats[0]  # [B, heads, N, d]; SAM has no CLS token
+        if not bin:
+            desc = x.permute(0, 2, 3, 1).flatten(start_dim=-2, end_dim=-1).unsqueeze(dim=1)
+        else:
+            desc = self._log_bin(x)
+        return desc
+
+
+def make_extractor(model_type: str, stride: int = None, device: str = 'cuda'):
+    """Factory: return the appropriate extractor for the given model_type."""
+    if model_type.startswith('sam_'):
+        return SAMExtractor(model_type, device=device)
+    stride = stride if stride is not None else ViTExtractor.get_default_stride(model_type)
+    return ViTExtractor(model_type, stride=stride, device=device)
+
 
 """ taken from https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse"""
 def str2bool(v):
