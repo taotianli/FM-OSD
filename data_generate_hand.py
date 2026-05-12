@@ -19,7 +19,7 @@ def str2bool(v):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_pth', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Hand/hand/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Hand/hand/')
     parser.add_argument('--id_shot', default=0, type=int,
                         help='Index into sorted training IDs for one-shot template')
     parser.add_argument('--max_iter', default=500, type=int)
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     one_shot = Hand_SSL_Infer_SSLv1_generate(
         pathDataset=args.dataset_pth, id_oneshot=args.id_shot)
 
-    snapshot_path = '/home/taotl/Desktop/FM-OSD/data/hand/'
+    snapshot_path = '/projects/u6da/fmosd_cache/hand/'
     os.makedirs(snapshot_path, exist_ok=True)
     image_root = os.path.join(snapshot_path, 'image/')
     label_root = os.path.join(snapshot_path, 'label/')

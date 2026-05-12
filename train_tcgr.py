@@ -343,7 +343,7 @@ if __name__ == "__main__":
     parser.add_argument('--topk',        default=3,          type=int)
 
     parser.add_argument('--dataset_pth', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/')
     parser.add_argument('--input_size',  default=[2400, 1935])
     parser.add_argument('--id_shot',     default=125,        type=int)
     parser.add_argument('--eval_radius', default=[2, 2.5, 3, 4, 6, 8])
@@ -362,7 +362,7 @@ if __name__ == "__main__":
     parser.add_argument('--topo_loss_weight',   default=0.1, type=float)
 
     parser.add_argument('--cache_dir', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache')
+                        default='/projects/u6da/fmosd_cache/tcgr_cache')
     parser.add_argument('--force_recompute', default='False', type=str2bool,
                         help='Recompute cached predictions even if they exist.')
     args = parser.parse_args()
@@ -387,8 +387,8 @@ if __name__ == "__main__":
     image_size = (args.load_size, args.load_size)
     model_post = Upnet_v3_coarsetofine2_tran_new(image_size, 6528, 256).to(device)
 
-    fine_ckpt  = '/home/taotl/Desktop/FM-OSD/models/model_post_fine_iter_20.pth'
-    global_ckpt = '/home/taotl/Desktop/FM-OSD/models/model_post_iter_9450.pth'
+    fine_ckpt  = '/home/u6da/taotl.u6da/FM-OSD/models/model_post_fine_iter_20.pth'
+    global_ckpt = '/home/u6da/taotl.u6da/FM-OSD/models/model_post_iter_9450.pth'
 
     # Load fine checkpoint and patch conv_out1 from global checkpoint
     model_post.load_state_dict(torch.load(fine_ckpt, map_location=device))

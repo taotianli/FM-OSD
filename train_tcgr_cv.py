@@ -207,14 +207,14 @@ def train_fold(fold_idx, train_items, val_items, args, device, fold_writer):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='TCGR 5-fold CV on all 400 images.')
     parser.add_argument('--dataset_pth', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/')
     parser.add_argument('--input_size',  default=[2400, 1935])
     parser.add_argument('--eval_radius', default=[2, 2.5, 3, 4, 6, 8])
 
     parser.add_argument('--cache_dir', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache')
+                        default='/projects/u6da/fmosd_cache/tcgr_cache')
     parser.add_argument('--save_dir',  type=str,
-                        default='/home/taotl/Desktop/FM-OSD/output')
+                        default='/home/u6da/taotl.u6da/FM-OSD/output')
 
     parser.add_argument('--bs',              default=32,   type=int)
     parser.add_argument('--max_iterations',  default=3000, type=int)

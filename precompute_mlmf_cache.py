@@ -156,7 +156,7 @@ def read_gt(dataset_pth, img_id):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_pth', default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/')
+    parser.add_argument('--dataset_pth', default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/')
     parser.add_argument('--input_size',  default=[2400, 1935])
     parser.add_argument('--id_shot',     default=125, type=int)
     parser.add_argument('--load_size',   default=224, type=int)
@@ -167,9 +167,9 @@ if __name__ == "__main__":
     parser.add_argument('--mlmf_layers', default='5,8,11')
     parser.add_argument('--mlmf_facets', default='key,value')
     parser.add_argument('--ckpt',
-        default='/home/taotl/Desktop/FM-OSD/models/local_mlmf/model_post_fine_iter_20_1.8327.pth')
+        default='/home/u6da/taotl.u6da/FM-OSD/models/local_mlmf/model_post_fine_iter_20_1.8327.pth')
     parser.add_argument('--cache_dir',
-        default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache_mlmf')
+        default='/projects/u6da/fmosd_cache/tcgr_cache_mlmf')
     parser.add_argument('--force', default='False', type=str2bool)
     args = parser.parse_args()
 

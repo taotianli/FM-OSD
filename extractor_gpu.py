@@ -78,7 +78,7 @@ class ViTExtractor:
                            timm: [vit_small_patch8_224 | vit_small_patch16_224 | vit_base_patch8_224 | vit_base_patch16_224]
         :return: the model
         """
-        hub_dir = '/home/taotl/.cache/torch/hub'
+        hub_dir = '/home/u6da/taotl.u6da/.cache/torch/hub'
         dino_local = f'{hub_dir}/facebookresearch_dino_main'
         dinov2_local = f'{hub_dir}/facebookresearch_dinov2_main'
 
@@ -656,8 +656,8 @@ class SAMExtractor:
     """
 
     SAM_CKPT_PATHS = {
-        'sam_vit_b': '/home/taotl/Desktop/FM-OSD/models/sam/sam_vit_b_01ec64.pth',
-        'sam_vit_l': '/home/taotl/Desktop/FM-OSD/models/sam/sam_vit_l_0b3195.pth',
+        'sam_vit_b': '/home/u6da/taotl.u6da/FM-OSD/models/sam/sam_vit_b_01ec64.pth',
+        'sam_vit_l': '/home/u6da/taotl.u6da/FM-OSD/models/sam/sam_vit_l_0b3195.pth',
     }
 
     EMBED_DIMS = {'sam_vit_b': 768, 'sam_vit_l': 1024}

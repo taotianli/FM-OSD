@@ -244,7 +244,7 @@ def plot_per_landmark_mre(fmosd_cache_dir, mlmf_cache_dir, out_dir,
 
     # FM-OSD baseline: pre-TCGR predictions on test set (ground truth available)
     fmosd_test  = load_cache(fmosd_cache_dir, 'test')
-    dset = '/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/'
+    dset = '/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/'
     mre_f = compute_mre_per_landmark({}, fmosd_test, dataset_pth=dset)
 
     # MLMF+TCGR: post-TCGR via fold model inference on all 400 images
@@ -382,11 +382,11 @@ def plot_sdr_curves(methods_data, out_dir):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_pth',
-        default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/')
+        default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/')
     parser.add_argument('--fmosd_cache',
-        default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache')
+        default='/projects/u6da/fmosd_cache/tcgr_cache')
     parser.add_argument('--mlmf_cache',
-        default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache_mlmf')
+        default='/projects/u6da/fmosd_cache/tcgr_cache_mlmf')
     parser.add_argument('--output_dir', default='figures')
     parser.add_argument('--qualitative_ids',
         default='262,197,330,359,304',

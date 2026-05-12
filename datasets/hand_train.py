@@ -9,8 +9,8 @@ from torchvision.transforms import transforms
 
 def GetHandDatasetfromfile(train):
     if train == 0:
-        PathOfData = '/home/taotl/Desktop/FM-OSD/data/hand/image'
-        PathOfTarget = '/home/taotl/Desktop/FM-OSD/data/hand/label'
+        PathOfData = '/home/u6da/taotl.u6da/FM-OSD/data/hand/image'
+        PathOfTarget = '/home/u6da/taotl.u6da/FM-OSD/data/hand/label'
     else:
         PathOfData = PathOfTarget = None
 

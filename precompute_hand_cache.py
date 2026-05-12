@@ -11,7 +11,7 @@ from extractor_gpu import ViTExtractor
 from post_net import Upnet_v3_MLMF_CoarseToFine
 
 
-HAND_PATH = '/home/taotl/Desktop/FM-OSD/dataset/Hand/hand'
+HAND_PATH = '/home/u6da/taotl.u6da/FM-OSD/data/Hand/hand'
 
 
 def str2bool(v):
@@ -179,10 +179,10 @@ if __name__ == '__main__':
     parser.add_argument('--mlmf_layers', default='5,8,11')
     parser.add_argument('--mlmf_facets', default='key,value')
     parser.add_argument('--ckpt',
-        default='/home/taotl/Desktop/FM-OSD/models/local_mlmf_hand/model_post_final.pth',
+        default='/home/u6da/taotl.u6da/FM-OSD/models/local_mlmf_hand/model_post_final.pth',
         help='Hand-trained Upnet_v3_MLMF_CoarseToFine (after train2_mlmf_hand.py)')
     parser.add_argument('--cache_dir',
-        default='/home/taotl/Desktop/FM-OSD/data/tcgr_cache_hand')
+        default='/projects/u6da/fmosd_cache/tcgr_cache_hand')
     parser.add_argument('--oneshot_idx', default=0, type=int,
         help='Index of template image in training split')
     parser.add_argument('--force', default='False', type=str2bool)

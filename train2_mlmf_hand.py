@@ -203,7 +203,7 @@ def find_landmark_all_mlmf_local_hand(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--save_dir', type=str, default='/home/taotl/Desktop/FM-OSD/output')
+    parser.add_argument('--save_dir', type=str, default='/home/u6da/taotl.u6da/FM-OSD/output')
     parser.add_argument('--load_size', default=224, type=int)
     parser.add_argument('--stride', default=4, type=int)
     parser.add_argument('--model_type', default='dino_vits8')
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     parser.add_argument('--bin', default='True', type=str2bool)
     parser.add_argument('--topk', default=3, type=int)
 
-    parser.add_argument('--dataset_pth', default='/home/taotl/Desktop/FM-OSD/dataset/Hand/hand/')
+    parser.add_argument('--dataset_pth', default='/home/u6da/taotl.u6da/FM-OSD/data/Hand/hand/')
     parser.add_argument('--input_size', default=[2048, 2048],
                         help='Must match augmented template crop H,W used in hand_train')
     parser.add_argument('--id_shot', default=0, type=int)
@@ -306,7 +306,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, model_post.parameters()), lr=args.lr)
 
-    snapshot_path = f'/home/taotl/Desktop/FM-OSD/models/{args.exp}'
+    snapshot_path = f'/home/u6da/taotl.u6da/FM-OSD/models/{args.exp}'
     os.makedirs(snapshot_path, exist_ok=True)
     writer = SummaryWriter(snapshot_path + '/log')
     extractor = ViTExtractor(args.model_type, args.stride, device=device)

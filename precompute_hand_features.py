@@ -61,11 +61,11 @@ def main():
     parser.add_argument('--mlmf_layers', default='5,8,11')
     parser.add_argument('--mlmf_facets', default='key,value')
     parser.add_argument('--dataset_pth',
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Hand/hand/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Hand/hand/')
     parser.add_argument('--train_patch_dir',
-                        default='/home/taotl/Desktop/FM-OSD/data/hand/image')
+                        default='/projects/u6da/fmosd_cache/hand/image')
     parser.add_argument('--cache_dir',
-                        default='/home/taotl/Desktop/FM-OSD/cache/feat_hand')
+                        default='/projects/u6da/fmosd_cache/feat_hand')
     parser.add_argument('--id_shot', default=0, type=int)
     parser.add_argument('--device',  default='cuda')
     args = parser.parse_args()

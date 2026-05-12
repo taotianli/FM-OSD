@@ -180,7 +180,7 @@ def heatmap_mse_loss(features, landmarks, var=5.0, criterion=torch.nn.MSELoss())
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train MLMF global on Hand (37 landmarks).')
-    parser.add_argument('--save_dir', type=str, default='/home/taotl/Desktop/FM-OSD/output')
+    parser.add_argument('--save_dir', type=str, default='/home/u6da/taotl.u6da/FM-OSD/output')
     parser.add_argument('--load_size', default=224, type=int)
     parser.add_argument('--stride', default=4, type=int)
     parser.add_argument('--model_type', default='dino_vits8', type=str)
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument('--topk', default=5, type=int)
 
     parser.add_argument('--dataset_pth', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Hand/hand/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Hand/hand/')
     parser.add_argument('--input_size', default=[2048, 2048],
                         help='Template H,W for heatmap resize (match data/hand augmented crop)')
     parser.add_argument('--id_shot', default=0, type=int)
@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(model_post.parameters(), lr=args.lr)
 
-    snapshot_path = '/home/taotl/Desktop/FM-OSD/models/' + args.exp
+    snapshot_path = '/home/u6da/taotl.u6da/FM-OSD/models/' + args.exp
     os.makedirs(snapshot_path, exist_ok=True)
     writer = SummaryWriter(snapshot_path + '/log')
 

@@ -70,13 +70,13 @@ def main():
     parser.add_argument('--stride', default=None, type=int,
                         help='Override stride. None = auto.')
     parser.add_argument('--dataset_pth',
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/',
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/',
                         type=str)
     parser.add_argument('--train_patch_dir',
-                        default='/home/taotl/Desktop/FM-OSD/data/head/image',
+                        default='/projects/u6da/fmosd_cache/head/image',
                         type=str)
     parser.add_argument('--cache_dir',
-                        default='/home/taotl/Desktop/FM-OSD/cache/feat',
+                        default='/projects/u6da/fmosd_cache/feat',
                         type=str)
     parser.add_argument('--id_shot', default=125, type=int,
                         help='One-shot template image ID.')

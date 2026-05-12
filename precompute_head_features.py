@@ -64,11 +64,11 @@ def main():
     parser.add_argument('--mlmf_layers',  default='5,8,11')
     parser.add_argument('--mlmf_facets',  default='key,value')
     parser.add_argument('--dataset_pth',
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/')
     parser.add_argument('--train_patch_dir',
-                        default='/home/taotl/Desktop/FM-OSD/data/head/image')
+                        default='/projects/u6da/fmosd_cache/head/image')
     parser.add_argument('--cache_dir',
-                        default='/home/taotl/Desktop/FM-OSD/cache/feat_head')
+                        default='/projects/u6da/fmosd_cache/feat_head')
     parser.add_argument('--id_shot',  default=125, type=int)
     parser.add_argument('--input_size', default=[2400, 1935])
     parser.add_argument('--device',   default='cuda')

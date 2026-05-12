@@ -174,7 +174,7 @@ def find_landmark_all_mssr(extractor, device, model_post, image_path1, dataloade
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train global branch with MLMF + MSSR.')
-    parser.add_argument('--save_dir', type=str, default='/home/taotl/Desktop/FM-OSD/output')
+    parser.add_argument('--save_dir', type=str, default='/home/u6da/taotl.u6da/FM-OSD/output')
     parser.add_argument('--load_size', default=224, type=int)
     parser.add_argument('--stride', default=4, type=int)
     parser.add_argument('--model_type', default='dino_vits8', type=str)
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument('--topk', default=5, type=int)
 
     parser.add_argument('--dataset_pth', type=str,
-                        default='/home/taotl/Desktop/FM-OSD/dataset/Cephalometric/')
+                        default='/home/u6da/taotl.u6da/FM-OSD/data/Cephalometric/')
     parser.add_argument('--input_size', default=[2400, 1935])
     parser.add_argument('--id_shot', default=125, type=int)
     parser.add_argument('--eval_radius', default=[2, 2.5, 3, 4, 6, 8])
@@ -251,7 +251,7 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(model_post.parameters(), lr=args.lr)
 
-    snapshot_path = f'/home/taotl/Desktop/FM-OSD/models/{args.exp}'
+    snapshot_path = f'/home/u6da/taotl.u6da/FM-OSD/models/{args.exp}'
     os.makedirs(snapshot_path, exist_ok=True)
     writer = SummaryWriter(snapshot_path + '/log')
 
